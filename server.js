@@ -15,34 +15,35 @@ const fetchData = async () => {
     const response = await fetch(csvUrl);
     const csvData = await response.text();
 
-    // Chuyển đổi dữ liệu CSV thành JSON lấy dữ liệu từ cột A đến cột Z
+    // Chuyển đổi dữ liệu CSV thành JSON
     const lines = csvData.split("\n");
     const result = {};
 
     for (let i = 1; i < lines.length; i++) {
       const currentLine = lines[i].split(",");
 
-      // Sử dụng cột W (chỉ số 22) làm khoá chính
-      const key = currentLine[22]; // Cột W có chỉ số 22 (0-indexed)
-      if (!key) continue; // Bỏ qua nếu không có giá trị ở cột W
+      // Sử dụng cột A (chỉ số 0) làm khoá chính
+      const primaryKey = currentLine[0]; // Cột A có chỉ số 0 (0-indexed)
+      if (!primaryKey) continue; // Bỏ qua nếu không có giá trị ở cột A
 
-      const obj = {};
-
-      // Lấy dữ liệu từ cột A đến cột Z
-      for (let j = 0; j < 26; j++) {
-        if (currentLine[j] !== undefined) {
-          obj[String.fromCharCode(65 + j)] = currentLine[j];
-        }
+      // Nếu khoá chính chưa tồn tại trong result, khởi tạo đối tượng mới
+      if (!result[primaryKey]) {
+        result[primaryKey] = {};
       }
 
-      // Lưu vào object với cột W là khoá
-      result[key] = obj;
+      // Gộp dữ liệu từ cột A đến cột Z vào đối tượng cho khoá chính
+      for (let j = 0; j < 26; j++) {
+        const field = String.fromCharCode(65 + j);
+        if (currentLine[j] !== undefined) {
+          result[primaryKey][field] = currentLine[j];
+        }
+      }
     }
 
     // Ghi dữ liệu JSON vào file
     writeFileSync("data.json", JSON.stringify(result, null, 2));
     console.log(
-      "Dữ liệu từ cột A đến cột Z đã được lưu vào data.json với cột W là khoá."
+      "Dữ liệu từ cột A đến cột Z đã được lưu vào data.json với cột A là khoá."
     );
   } catch (error) {
     console.error("Lỗi:", error);
@@ -62,10 +63,10 @@ const getData = () => {
 
 // Endpoint /check
 app.get("/check", async (req, res) => {
-  const email = req.query.email;
+  const value = req.query.value;
 
-  if (!email) {
-    return res.status(400).json({ error: "Vui lòng cung cấp email hợp lệ." });
+  if (!value) {
+    return res.status(400).json({ error: "Vui lòng cung cấp giá trị hợp lệ." });
   }
 
   // Tải dữ liệu từ CSV và ghi vào file JSON mỗi khi có yêu cầu
@@ -74,15 +75,20 @@ app.get("/check", async (req, res) => {
   // Lấy dữ liệu từ file JSON
   const data = getData();
 
-  // Tìm kiếm email trong dữ liệu
-  const userData = data[email];
+  // Tìm kiếm dữ liệu theo cột W và trả về tất cả các kết quả
+  const result = {};
+  for (const [key, valueObj] of Object.entries(data)) {
+    if (valueObj["W"] === value) {
+      result[key] = valueObj;
+    }
+  }
 
-  if (userData) {
-    // Trả về thông tin của email nếu tìm thấy
-    res.json(userData);
+  if (Object.keys(result).length > 0) {
+    res.json(result);
   } else {
-    // Trả về thông báo lỗi nếu không tìm thấy email
-    res.status(404).json({ error: "Không tìm thấy thông tin cho email này." });
+    res
+      .status(404)
+      .json({ error: "Không tìm thấy thông tin cho giá trị này trong cột W." });
   }
 });
 
